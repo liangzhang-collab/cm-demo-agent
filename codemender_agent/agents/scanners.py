@@ -5,10 +5,12 @@ Implements SAST static analysis agent, SCA dependency scanner agent, and Paralle
 
 from google.adk import Agent
 from google.adk.agents.parallel_agent import ParallelAgent
+from codemender_agent.agents.model_router import ModelRouter
 from codemender_agent.tools.codemender_tools import scan_sast_vulnerabilities, scan_sca_dependencies
 
 sast_scanner_agent = Agent(
     name="sast_scanner",
+    model=ModelRouter.select_model_for_task("SAST_SCAN"),
     description="Performs Static Application Security Testing (SAST) to discover vulnerabilities in source code.",
     instruction=(
         "You are the SAST Scanner Agent. "
@@ -20,6 +22,7 @@ sast_scanner_agent = Agent(
 
 sca_scanner_agent = Agent(
     name="sca_scanner",
+    model=ModelRouter.select_model_for_task("SCA"),
     description="Performs Software Composition Analysis (SCA) to discover package and dependency vulnerabilities.",
     instruction=(
         "You are the SCA Dependency Scanner Agent. "

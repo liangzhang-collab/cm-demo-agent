@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  codemender-agent:
+    build: .
+    container_name: codemender_agent_service
+    environment:
+      - GCP_PROJECT_ID=codemender-enterprise-prod
+      - ENVIRONMENT=production
+      - CODEMENDER_DB_PATH=/app/data/codemender_state.db
+    volumes:
+      - ./data:/app/data
+      - .:/app/workspace
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

@@ -1,0 +1,35 @@
+[
+  {
+    "vuln_id": "SAST-SQLI-001",
+    "title": "Unsanitized User Input in SQL Query Construction",
+    "severity": "HIGH",
+    "category": "SAST",
+    "file_path": "app/db.py",
+    "line_number": 42,
+    "cve_id": "CWE-89",
+    "expected_fix_pattern": "query = \"SELECT * FROM users WHERE username = %s\"",
+    "expected_verification": true
+  },
+  {
+    "vuln_id": "SAST-PATH-002",
+    "title": "Arbitrary Path Traversal via Unvalidated Input",
+    "severity": "CRITICAL",
+    "category": "SAST",
+    "file_path": "app/utils/file_handler.py",
+    "line_number": 88,
+    "cve_id": "CWE-22",
+    "expected_fix_pattern": "os.path.abspath",
+    "expected_verification": true
+  },
+  {
+    "vuln_id": "SCA-DEP-001",
+    "title": "Outdated PyYAML package vulnerable to Arbitrary Code Execution",
+    "severity": "HIGH",
+    "category": "SCA",
+    "file_path": "requirements.txt",
+    "line_number": 5,
+    "cve_id": "CVE-2020-14343",
+    "expected_fix_pattern": "PyYAML>=6.0.1",
+    "expected_verification": true
+  }
+]

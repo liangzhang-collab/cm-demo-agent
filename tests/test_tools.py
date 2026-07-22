@@ -1,5 +1,5 @@
 """
-Unit tests for CodeMender function tools and CLI wrapper.
+Unit tests for CodeMender function tools, Pydantic schemas, and error recovery.
 """
 
 import json
@@ -12,6 +12,7 @@ from codemender_agent.tools.codemender_tools import (
     generate_vulnerability_fix,
     verify_vulnerability_fix,
     export_security_report,
+    request_human_approval,
 )
 
 
@@ -23,7 +24,7 @@ def test_cli_wrapper_environment():
 
 
 def test_tool_check_env():
-    res_str = check_codemender_env()
+    res_str = check_codemender_env(".")
     data = json.loads(res_str)
     assert data.get("installed") is True
 
@@ -55,6 +56,15 @@ def test_tool_generate_and_verify_fix():
     assert ver_data["verified"] is True
 
 
+def test_tool_error_recovery_instructions():
+    # Test invalid vuln_id (empty string)
+    err_str = generate_vulnerability_fix(".", "")
+    err_data = json.loads(err_str)
+    assert err_data["success"] is False
+    assert "recovery_instructions" in err_data
+    assert len(err_data["recovery_instructions"]) > 10
+
+
 def test_tool_export_report():
     vulns = [
         {
@@ -71,3 +81,15 @@ def test_tool_export_report():
     report = export_security_report(".", json.dumps(vulns), "markdown")
     assert "# CodeMender Security Audit Report" in report
     assert "SAST-SQLI-001" in report
+
+
+def test_request_human_approval_tool():
+    res_str = request_human_approval(
+        action_type="APPLY_CRITICAL_PATCH",
+        vuln_id="SAST-SQLI-001",
+        patch_diff="--- a/db.py\n+++ b/db.py",
+        reason="Remediate SQL injection before production release",
+    )
+    data = json.loads(res_str)
+    assert data["approved"] is True
+    assert data["status"] == "APPROVED"

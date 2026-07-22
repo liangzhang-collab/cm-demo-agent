@@ -1,9 +1,12 @@
 """
-Unit tests for Context state and CodeMenderMemory manager.
+Unit tests for Context state, CodeMenderMemory manager, History Compaction,
+Async Memory Operations, and SqliteSessionService.
 """
 
 import pytest
+import asyncio
 from codemender_agent.state.memory import CodeMenderMemory
+from codemender_agent.state.session_db import SqliteSessionService
 
 
 def test_memory_initialization():
@@ -40,3 +43,52 @@ def test_memory_patch_and_verify():
     assert memory.get_all_vulnerabilities()[0]["status"] == "VERIFIED_FIXED"
     assert memory.is_repair_complete() is True
     assert memory.get_next_pending_vulnerability() is None
+
+
+def test_history_compaction():
+    state = {}
+    memory = CodeMenderMemory(state)
+    memory.add_vulnerabilities([{"vuln_id": "V-1", "severity": "CRITICAL", "status": "DISCOVERED"}])
+
+    for i in range(15):
+        memory.record_event("TRACE_STEP", {"step": i})
+
+    summary = memory.compact_history(max_events=5)
+    assert "COMPACTED CONTEXT SUMMARY" in summary
+    assert len(state["codemender_event_history"]) <= 5
+
+
+@pytest.mark.asyncio
+async def test_async_memory_operations():
+    state = {}
+    memory = CodeMenderMemory(state, db_path=":memory:")
+    vulns = [{"vuln_id": "V-ASYNC-1", "severity": "HIGH", "status": "DISCOVERED"}]
+
+    await memory.add_vulnerabilities_async(vulns)
+    all_vulns = await memory.get_all_vulnerabilities_async()
+    assert len(all_vulns) == 1
+
+    await memory.mark_patch_generated_async("V-ASYNC-1", "async diff")
+    await memory.mark_verified_fixed_async("V-ASYNC-1")
+    stats = await memory.get_summary_stats_async()
+    assert stats["verified_fixed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sqlite_session_service():
+    session_svc = SqliteSessionService(db_path=":memory:")
+    session = await session_svc.create_session(
+        app_name="codemender_test_app",
+        user_id="user_123",
+        session_id="test_sess_001",
+        state={"repo": "."},
+    )
+    assert session.id == "test_sess_001"
+
+    fetched = await session_svc.get_session(
+        app_name="codemender_test_app",
+        user_id="user_123",
+        session_id="test_sess_001",
+    )
+    assert fetched is not None
+    assert fetched.state.get("repo") == "."

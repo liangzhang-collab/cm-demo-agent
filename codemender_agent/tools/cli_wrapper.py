@@ -1,6 +1,7 @@
 """
 CLI Wrapper for Google Cloud CodeMender tool.
-Executes CLI commands or provides a fallback mock simulation when codemender binary is absent.
+Executes CLI commands or provides realistic mock simulation when the binary is absent.
+Includes robust error handling and explicit recovery instructions for the LLM.
 """
 
 import json
@@ -8,12 +9,12 @@ import os
 import shutil
 import subprocess
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from codemender_agent.config import SeverityLevel, Vulnerability, VulnerabilityStatus
 
 
 class CodeMenderCLIWrapper:
-    """Wrapper around CodeMender CLI executable with mock fallback for testing."""
+    """Wrapper around CodeMender CLI executable with robust error handling and mock fallback."""
 
     def __init__(self, cli_binary_name: str = "codemender"):
         self.cli_binary = shutil.which(cli_binary_name)
@@ -22,8 +23,20 @@ class CodeMenderCLIWrapper:
     def is_available(self) -> bool:
         return self.cli_binary is not None
 
-    def check_environment(self) -> Dict[str, Any]:
-        """Check CodeMender environment installation and authentication status."""
+    def check_environment(self, repo_path: str = ".") -> Dict[str, Any]:
+        """Check CodeMender environment installation, authentication status, and repo path."""
+        if not os.path.exists(repo_path):
+            return {
+                "success": False,
+                "installed": False,
+                "error_code": "REPO_PATH_NOT_FOUND",
+                "error_message": f"Target repository path '{repo_path}' does not exist on filesystem.",
+                "recovery_instructions": (
+                    "1. Verify the repository path passed to the tool. "
+                    "2. Ensure the working directory contains source code files before re-running."
+                ),
+            }
+
         if self.is_available:
             try:
                 res = subprocess.run(
@@ -35,25 +48,54 @@ class CodeMenderCLIWrapper:
                 if res.returncode == 0:
                     data = json.loads(res.stdout)
                     return {
+                        "success": True,
                         "installed": True,
                         "version": data.get("version", "1.0.0"),
                         "authenticated": data.get("authenticated", True),
                         "mode": "CLI",
+                        "repo_path": os.path.abspath(repo_path),
                     }
+                else:
+                    return {
+                        "success": False,
+                        "installed": True,
+                        "error_code": "CLI_EXECUTION_ERROR",
+                        "error_message": f"CodeMender version check failed: {res.stderr.strip()}",
+                        "recovery_instructions": "Ensure the CodeMender CLI binary is properly configured and authenticated with GCP credentials.",
+                    }
+            except subprocess.TimeoutExpired:
+                return {
+                    "success": False,
+                    "installed": True,
+                    "error_code": "CLI_TIMEOUT",
+                    "error_message": "CodeMender CLI version check timed out after 10 seconds.",
+                    "recovery_instructions": "Check system resource usage and verify CLI connectivity before retrying.",
+                }
             except Exception as e:
-                pass
+                return {
+                    "success": False,
+                    "installed": False,
+                    "error_code": "CLI_EXCEPTION",
+                    "error_message": f"Unexpected error during environment check: {str(e)}",
+                    "recovery_instructions": "Verify CodeMender binary permissions and environment variables.",
+                }
 
         # Mock fallback for demonstration and local testing
         return {
+            "success": True,
             "installed": True,
             "version": "1.4.0-mock",
             "authenticated": True,
             "mode": "MOCK_SIMULATOR",
             "message": "CodeMender CLI simulator active",
+            "repo_path": os.path.abspath(repo_path),
         }
 
-    def scan_sast(self, repo_path: str) -> List[Dict[str, Any]]:
+    def scan_sast(self, repo_path: str = ".") -> List[Dict[str, Any]]:
         """Run Static Application Security Testing (SAST) on repository."""
+        if not os.path.exists(repo_path):
+            raise ValueError(f"Target repository path '{repo_path}' does not exist.")
+
         if self.is_available:
             try:
                 res = subprocess.run(
@@ -64,11 +106,12 @@ class CodeMenderCLIWrapper:
                 )
                 if res.returncode == 0:
                     return json.loads(res.stdout)
-            except Exception:
-                pass
+                else:
+                    raise RuntimeError(f"CodeMender SAST scan failed (exit code {res.returncode}): {res.stderr.strip()}")
+            except subprocess.TimeoutExpired:
+                raise TimeoutError("CodeMender SAST scan timed out after 60 seconds.")
 
         # Realistic mock SAST findings for demonstration
-        abs_repo = os.path.abspath(repo_path)
         return [
             {
                 "vuln_id": "SAST-SQLI-001",
@@ -94,8 +137,11 @@ class CodeMenderCLIWrapper:
             },
         ]
 
-    def scan_sca(self, repo_path: str) -> List[Dict[str, Any]]:
+    def scan_sca(self, repo_path: str = ".") -> List[Dict[str, Any]]:
         """Run Software Composition Analysis (SCA) for dependency vulnerabilities."""
+        if not os.path.exists(repo_path):
+            raise ValueError(f"Target repository path '{repo_path}' does not exist.")
+
         if self.is_available:
             try:
                 res = subprocess.run(
@@ -106,8 +152,10 @@ class CodeMenderCLIWrapper:
                 )
                 if res.returncode == 0:
                     return json.loads(res.stdout)
-            except Exception:
-                pass
+                else:
+                    raise RuntimeError(f"CodeMender SCA scan failed (exit code {res.returncode}): {res.stderr.strip()}")
+            except subprocess.TimeoutExpired:
+                raise TimeoutError("CodeMender SCA scan timed out after 60 seconds.")
 
         # Realistic mock SCA findings for demonstration
         return [
@@ -126,6 +174,9 @@ class CodeMenderCLIWrapper:
 
     def generate_fix(self, repo_path: str, vuln_id: str) -> Dict[str, Any]:
         """Generate candidate fix / patch diff for given vulnerability ID."""
+        if not vuln_id or not vuln_id.strip():
+            raise ValueError("vuln_id must be provided.")
+
         if self.is_available:
             try:
                 res = subprocess.run(
@@ -136,26 +187,34 @@ class CodeMenderCLIWrapper:
                 )
                 if res.returncode == 0:
                     return json.loads(res.stdout)
-            except Exception:
-                pass
+                else:
+                    raise RuntimeError(f"CodeMender fix generation failed: {res.stderr.strip()}")
+            except subprocess.TimeoutExpired:
+                raise TimeoutError("CodeMender fix generation timed out.")
 
         # Mock fix generation
         patches = {
-            "SAST-SQLI-001": """--- a/app/db.py
-+++ b/app/db.py
-@@ -42,1 +42,1 @@
--query = f"SELECT * FROM users WHERE username = '{username}'"
-+query = "SELECT * FROM users WHERE username = %s"  # Parameterized query fix""",
-            "SAST-PATH-002": """--- a/app/utils/file_handler.py
-+++ b/app/utils/file_handler.py
-@@ -88,1 +88,1 @@
--file_path = os.path.join(BASE_DIR, user_input)
-+file_path = os.path.abspath(os.path.join(BASE_DIR, os.path.basename(user_input)))""",
-            "SCA-DEP-001": """--- a/requirements.txt
-+++ b/requirements.txt
-@@ -5,1 +5,1 @@
--PyYAML==5.3.1
-+PyYAML>=6.0.1""",
+            "SAST-SQLI-001": (
+                "--- a/app/db.py\n"
+                "+++ b/app/db.py\n"
+                "@@ -42,1 +42,1 @@\n"
+                "-query = f\"SELECT * FROM users WHERE username = '{username}'\"\n"
+                "+query = \"SELECT * FROM users WHERE username = %s\"  # Parameterized query fix"
+            ),
+            "SAST-PATH-002": (
+                "--- a/app/utils/file_handler.py\n"
+                "+++ b/app/utils/file_handler.py\n"
+                "@@ -88,1 +88,1 @@\n"
+                "-file_path = os.path.join(BASE_DIR, user_input)\n"
+                "+file_path = os.path.abspath(os.path.join(BASE_DIR, os.path.basename(user_input)))"
+            ),
+            "SCA-DEP-001": (
+                "--- a/requirements.txt\n"
+                "+++ b/requirements.txt\n"
+                "@@ -5,1 +5,1 @@\n"
+                "-PyYAML==5.3.1\n"
+                "+PyYAML>=6.0.1"
+            ),
         }
 
         diff = patches.get(vuln_id, "--- a/file.py\n+++ b/file.py\n@@ -1,1 +1,1 @@\n-# Fix applied\n+# Remediated code")
@@ -168,6 +227,9 @@ class CodeMenderCLIWrapper:
 
     def verify_fix(self, repo_path: str, vuln_id: str) -> Dict[str, Any]:
         """Verify applied fix against CodeMender verification test suites."""
+        if not vuln_id or not vuln_id.strip():
+            raise ValueError("vuln_id must be provided.")
+
         if self.is_available:
             try:
                 res = subprocess.run(
@@ -178,8 +240,10 @@ class CodeMenderCLIWrapper:
                 )
                 if res.returncode == 0:
                     return json.loads(res.stdout)
-            except Exception:
-                pass
+                else:
+                    raise RuntimeError(f"CodeMender fix verification failed: {res.stderr.strip()}")
+            except subprocess.TimeoutExpired:
+                raise TimeoutError("CodeMender fix verification timed out.")
 
         # Mock verification response
         return {
@@ -193,6 +257,15 @@ class CodeMenderCLIWrapper:
         """Export security scan and remediation report."""
         vulns = vulnerabilities or []
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if output_format == "json":
+            return json.dumps({
+                "report_title": "CodeMender Security Audit Report",
+                "repo_path": repo_path,
+                "timestamp": timestamp,
+                "findings_count": len(vulns),
+                "vulnerabilities": vulns,
+            }, indent=2)
 
         report_lines = [
             f"# CodeMender Security Audit Report",

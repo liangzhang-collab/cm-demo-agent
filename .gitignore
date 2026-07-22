@@ -1,0 +1,35 @@
+# ADK and IDE local configurations
+.agents
+.github
+.pytest_cache
+.venv
+
+# Python ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.tox/
+.coverage
+.cache
+htmlcov/
+
+# Local databases and audit report outputs
+*.db
+*.sqlite
+codemender-report.md
+codemender-audit-report.md
+
+# OS and system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

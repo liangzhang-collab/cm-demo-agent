@@ -4,10 +4,12 @@ Validates CodeMender environment, CLI installation, authentication, and target r
 """
 
 from google.adk import Agent
+from codemender_agent.agents.model_router import ModelRouter
 from codemender_agent.tools.codemender_tools import check_codemender_env
 
 auditor_agent = Agent(
     name="env_and_repo_auditor",
+    model=ModelRouter.select_model_for_task("AUDIT"),
     description="Audits system environment, verifies CodeMender installation/auth, and checks repository readiness.",
     instruction=(
         "You are the Environment & Repository Auditor Agent for CodeMender. "

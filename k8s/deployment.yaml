@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codemender-agent-deployment
+  labels:
+    app: codemender-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: codemender-agent
+  template:
+    metadata:
+      labels:
+        app: codemender-agent
+    spec:
+      containers:
+      - name: codemender-agent
+        image: gcr.io/codemender-enterprise-prod/agent:latest
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+        env:
+        - name: GCP_PROJECT_ID
+          value: "codemender-enterprise-prod"
+        - name: CODEMENDER_DB_PATH
+          value: "/data/codemender_state.db"
+        volumeMounts:
+        - name: agent-persistent-storage
+          mountPath: /data
+      volumes:
+      - name: agent-persistent-storage
+        persistentVolumeClaim:
+          claimName: codemender-pvc
