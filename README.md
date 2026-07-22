@@ -263,8 +263,3 @@ CodeMender adheres to Google Cloud's enterprise security and privacy principles:
 - **PII & Secret Redaction**: All API keys, tokens, and credentials are automatically redacted before logging or tracing.
 - **Transient Data Retention**: Interaction sessions are retained for a maximum of 7 days or immediately purged upon calling `cm clean`.
 
----
-
-## License
-
-Distributed under the **Apache 2.0 License**. See `LICENSE` for more information.
