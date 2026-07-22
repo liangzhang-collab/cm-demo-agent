@@ -1,5 +1,6 @@
 """
 Configuration schemas, Pydantic data models, and strict tool input schemas for CodeMender ADK Agent.
+Alings with official CodeMender (`cm`) CLI capabilities and workflows.
 """
 
 from enum import Enum
@@ -16,16 +17,19 @@ class SeverityLevel(str, Enum):
 
 class VulnerabilityStatus(str, Enum):
     DISCOVERED = "DISCOVERED"
+    OPEN = "OPEN"
     IN_PROGRESS = "IN_PROGRESS"
     PATCH_GENERATED = "PATCH_GENERATED"
     VERIFIED_FIXED = "VERIFIED_FIXED"
+    FIXED = "FIXED"
+    DISMISSED = "DISMISSED"
     FAILED = "FAILED"
     REJECTED_BY_POLICY = "REJECTED_BY_POLICY"
     PENDING_APPROVAL = "PENDING_APPROVAL"
 
 
 class Vulnerability(BaseModel):
-    vuln_id: str = Field(..., description="Unique vulnerability identifier (e.g., SAST-SQLI-001)")
+    vuln_id: str = Field(..., description="Unique vulnerability identifier or UUID (e.g., SAST-SQLI-001 or finding UUID)")
     title: str = Field(..., description="Short summary of vulnerability")
     severity: SeverityLevel = Field(..., description="Vulnerability severity level")
     file_path: str = Field(..., description="File path relative to repository root")
@@ -48,7 +52,7 @@ class ScanSummary(BaseModel):
 
 
 class FixResult(BaseModel):
-    vuln_id: str = Field(..., description="Vulnerability ID")
+    vuln_id: str = Field(..., description="Vulnerability ID or finding UUID")
     patch_applied: bool = Field(False, description="Whether patch was applied to codebase")
     verified: bool = Field(False, description="Whether fix was verified clean")
     details: str = Field("", description="Verification test output or error logs")
@@ -72,20 +76,29 @@ class CheckEnvInput(BaseModel):
     repo_path: str = Field(".", description="Path to local target repository directory")
 
 
+class InitInput(BaseModel):
+    repo_path: str = Field(".", description="Root directory of target codebase")
+    verify: bool = Field(True, description="Verify connectivity to cloud reasoning engine")
+
+
 class ScanSastInput(BaseModel):
-    repo_path: str = Field(".", description="Path to target local repository directory")
+    repo_path: str = Field(".", description="Target repository path")
     min_severity: Optional[SeverityLevel] = Field(None, description="Optional minimum severity filter")
+    model: str = Field("gemini-3.5-flash", description="Gemini model for scanning")
 
 
 class ScanScaInput(BaseModel):
-    repo_path: str = Field(".", description="Path to target local repository directory")
+    repo_path: str = Field(".", description="Target repository path")
     manifest_file: Optional[str] = Field(None, description="Specific manifest file (e.g. requirements.txt)")
+    model: str = Field("gemini-3.5-flash", description="Gemini model for scanning")
 
 
 class GenerateFixInput(BaseModel):
     repo_path: str = Field(".", description="Path to target local repository directory")
-    vuln_id: str = Field(..., description="Unique vulnerability ID to generate a patch for (e.g. SAST-SQLI-001)")
+    vuln_id: str = Field(..., description="Unique vulnerability ID or finding UUID to generate a patch for")
     context_lines: int = Field(3, ge=1, le=20, description="Number of context lines for patch diff generation")
+    model: str = Field("gemini-3.1-pro-preview", description="Gemini model for fix synthesis")
+    auto_apply: bool = Field(False, description="Automatically apply patch to workspace")
 
     @field_validator("vuln_id")
     @classmethod
@@ -98,19 +111,35 @@ class GenerateFixInput(BaseModel):
 
 class VerifyFixInput(BaseModel):
     repo_path: str = Field(".", description="Path to target local repository directory")
-    vuln_id: str = Field(..., description="Unique vulnerability ID to verify")
+    vuln_id: str = Field(..., description="Unique vulnerability ID or finding UUID to verify")
     sandbox_timeout: int = Field(60, ge=5, le=300, description="Verification sandbox timeout in seconds")
+    model: str = Field("gemini-3.5-flash", description="Gemini model for verification")
+
+
+class ImportFindingsInput(BaseModel):
+    file_path: str = Field(..., description="Path to third-party findings file (JSON or SARIF)")
+
+
+class VcsInput(BaseModel):
+    subcommand: str = Field("status", description="VCS operation: 'status', 'diff', 'stage', or 'reset'")
+
+
+class BuildInput(BaseModel):
+    repo_path: str = Field(".", description="Target project directory")
+    force: bool = Field(True, description="Skip build confirmation prompts")
 
 
 class ExportReportInput(BaseModel):
     repo_path: str = Field(".", description="Target repository path")
     vulnerabilities_json: Optional[str] = Field(None, description="Optional JSON string of vulnerability records")
-    output_format: str = Field("markdown", description="Output format: 'markdown', 'html', or 'json'")
+    output_format: str = Field("markdown", description="Output format: 'markdown', 'html', 'json', 'sarif', or 'table'")
+    severity: Optional[str] = Field(None, description="Optional severity filter (CRITICAL, HIGH, MEDIUM, LOW)")
+    status: Optional[str] = Field(None, description="Optional status filter (OPEN, FIXED, DISMISSED)")
 
 
 class HumanApprovalInput(BaseModel):
     action_type: str = Field(..., description="Type of high-stakes action (e.g. APPLY_CRITICAL_PATCH, DELETE_FILE)")
-    vuln_id: str = Field(..., description="Target vulnerability ID")
+    vuln_id: str = Field(..., description="Target vulnerability ID or finding UUID")
     patch_diff: str = Field(..., description="Unified patch diff content proposed for application")
     reason: str = Field(..., description="Justification and impact analysis for human reviewer")
 
